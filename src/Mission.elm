@@ -3,7 +3,9 @@ module Mission exposing (Mission, MissionId(..), decoder, fetchAll, unwrapId)
 import Domain exposing (DomainId(..))
 import GradeLevel exposing (GradeLevelId(..))
 import Http
+import HttpBuilder exposing (..)
 import Json.Decode as Decode exposing (Decoder)
+import Json.Decode.Pipeline exposing (hardcoded, optional, required)
 
 
 type MissionId
@@ -23,14 +25,14 @@ type alias Mission =
 
 decoder : Decoder Mission
 decoder =
-    Decode.map7 Mission
-        (Decode.field "id" (Decode.int |> Decode.map MissionId))
-        (Decode.field "grade_level_id" (Decode.int |> Decode.map GradeLevelId))
-        (Decode.field "domain_id" (Decode.int |> Decode.map DomainId))
-        (Decode.field "active_quest_count" Decode.int)
-        (Decode.field "inactive_quest_count" Decode.int)
-        (Decode.field "help_text" (Decode.nullable Decode.string))
-        (Decode.field "active" Decode.bool)
+    Decode.succeed Mission
+        |> required "id" (Decode.map MissionId Decode.int)
+        |> required "grade_level_id" (Decode.map GradeLevelId Decode.int)
+        |> required "domain_id" (Decode.map DomainId Decode.int)
+        |> required "active_quest_count" Decode.int
+        |> required "inactive_quest_count" Decode.int
+        |> required "help_text" (Decode.nullable Decode.string)
+        |> required "active" Decode.bool
 
 
 unwrapId : MissionId -> Int
@@ -39,4 +41,5 @@ unwrapId (MissionId id) =
 
 
 fetchAll =
-    Http.get "//localhost:3000/missions" (Decode.list decoder)
+    HttpBuilder.get "http://localhost:3000/missions"
+        |> HttpBuilder.withExpectJson (Decode.list decoder)

@@ -33,9 +33,9 @@ type RemoteData e a
 type Msg
     = LinkClicked Browser.UrlRequest
     | ChangedUrl Url.Url
-    | DomainsCompleted (Result Http.Error (List Domain))
-    | GradeLevelsCompleted (Result Http.Error (List GradeLevel))
-    | MissionsCompleted (Result Http.Error (List Mission))
+    | DomainsLoadingComplete (Result Http.Error (List Domain))
+    | GradeLevelsLoadingComplete (Result Http.Error (List GradeLevel))
+    | MissionsLoadingComplete (Result Http.Error (List Mission))
 
 
 fromResult : Result e a -> RemoteData e a
@@ -52,9 +52,9 @@ init : () -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
 init flags url key =
     ( { gradeLevels = NotAsked, domains = NotAsked, missions = NotAsked, route = Routing.fromUrl url, key = key }
     , Cmd.batch
-        [ Domain.fetchAll |> Http.send DomainsCompleted
-        , GradeLevel.fetchAll |> Http.send GradeLevelsCompleted
-        , Mission.fetchAll |> Http.send MissionsCompleted
+        [ Domain.fetchAll |> Http.send DomainsLoadingComplete
+        , GradeLevel.fetchAll |> Http.send GradeLevelsLoadingComplete
+        , Mission.fetchAll |> Http.send MissionsLoadingComplete
         ]
     )
 
@@ -62,13 +62,13 @@ init flags url key =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        DomainsCompleted result ->
+        DomainsLoadingComplete result ->
             ( { model | domains = fromResult result }, Cmd.none )
 
-        GradeLevelsCompleted result ->
+        GradeLevelsLoadingComplete result ->
             ( { model | gradeLevels = fromResult result }, Cmd.none )
 
-        MissionsCompleted result ->
+        MissionsLoadingComplete result ->
             ( { model | missions = fromResult result }, Cmd.none )
 
         LinkClicked (Browser.Internal url) ->
