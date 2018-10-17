@@ -7,6 +7,7 @@ import Domain exposing (Domain)
 import GradeLevel exposing (GradeLevel)
 import Html exposing (..)
 import Html.Attributes exposing (..)
+import Html.Events exposing (..)
 import Http
 import HttpBuilder exposing (..)
 import Json.Decode as Decode
@@ -22,6 +23,7 @@ type alias Model =
     , missions : WebData (List Mission)
     , route : Maybe Route
     , key : Nav.Key
+    , missionUpdateForm : MissionFormModel
     }
 
 
@@ -31,18 +33,42 @@ type Msg
     | DomainsLoadingComplete (Result Http.Error (List Domain))
     | GradeLevelsLoadingComplete (Result Http.Error (List GradeLevel))
     | MissionsLoadingComplete (Result Http.Error (List Mission))
+    | SubmitMissionUpdateForm
+    | SetMissionUpdateFormHelpText String
+    | SetMissionUpdateFormActive Bool
 
 
 init : () -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
 init flags url key =
-    ( { gradeLevels = RemoteData.NotAsked, domains = RemoteData.NotAsked, missions = RemoteData.NotAsked, route = Routing.fromUrl url, key = key }
-    , Cmd.batch
-        [ Domain.fetchAll |> Http.send DomainsLoadingComplete
-        , GradeLevel.fetchAll |> Http.send GradeLevelsLoadingComplete
-        , Mission.fetchAll |> HttpBuilder.send MissionsLoadingComplete
-        ]
-    )
+    let
+        fetchTask =
+            Task.map3
+                (Domain.fetchAll |> Http.send DomainsLoadingComplete)
+                    |> Http.toTask
+                (GradeLevel.fetchAll |> Http.send GradeLevelsLoadingComplete)
+                    |> Http.toTask
+                (Mission.fetchAll |> HttpBuilder.send MissionsLoadingComplete)
+                    |> Http.toTask
 
+        blah =
+            Task.sequence []
+            -- Cmd.batch
+            -- [ Domain.fetchAll |> Http.send DomainsLoadingComplete
+            -- , GradeLevel.fetchAll |> Http.send GradeLevelsLoadingComplete
+            -- , Mission.fetchAll |> HttpBuilder.send MissionsLoadingComplete
+            -- ]
+        )
+    in
+        ( { gradeLevels = RemoteData.NotAsked
+          , domains = RemoteData.NotAsked
+          , missions = RemoteData.NotAsked
+          , route = Routing.fromUrl url
+          , key = key
+          , missionUpdateForm = emptyMissionUpdateForm
+          }
+        ,
+
+Task.perform
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
@@ -74,6 +100,26 @@ update msg model =
         ChangedUrl url ->
             ( { model | route = Routing.fromUrl url }, Cmd.none )
 
+        SubmitMissionUpdateForm ->
+            ( model, Cmd.none )
+
+        SetMissionUpdateFormHelpText _ ->
+            ( model, Cmd.none )
+
+        SetMissionUpdateFormActive isActive ->
+            let
+                form =
+                    model.missionUpdateForm
+
+                updatedForm =
+                    { form | active = isActive }
+            in
+            ( { model | missionUpdateForm = updatedForm }, Cmd.none )
+
+
+
+-- ( { model | active = thing }, Cmd.none )
+
 
 view : Model -> Browser.Document Msg
 view model =
@@ -87,7 +133,7 @@ view model =
 -- It time, provide an example
 
 
-renderRoute : Model -> List (Html msg)
+renderRoute : Model -> List (Html Msg)
 renderRoute model =
     case model.route of
         Just CurriculumRoute ->
@@ -101,7 +147,32 @@ renderRoute model =
             [ h2 [] [ text "Error!, no route found" ] ]
 
 
-renderMission : Model -> MissionId -> Html msg
+
+--type alias MissionFormModel =
+--    { id : String
+--    , helpText : String
+--    , active : Bool
+--    , errors : []
+--    }
+
+
+type alias MissionFormModel =
+    { id : String
+    , helpText : String
+    , active : Bool
+    , errors : List String
+    }
+
+
+emptyMissionUpdateForm =
+    { id = ""
+    , helpText = ""
+    , active = False
+    , errors = []
+    }
+
+
+renderMission : Model -> MissionId -> Html Msg
 renderMission model missionId =
     let
         findMission missions =
@@ -120,28 +191,28 @@ renderMission model missionId =
             text (Debug.toString err)
 
         RemoteData.Success missions ->
+
             case findMission missions of
                 Just aMission ->
                     div []
-                        -- [ div [] [ text (Debug.toString aMission) ]
                         [ div []
                             [ h1 []
                                 [ text "Mission" ]
                             , p []
-                                [ text <| "mission_id: " ++ (Mission.idToString aMission.id) ]
+                                [ text <| "mission_id: " ++ Mission.idToString aMission.id ]
                             , p []
-                                [ text  <| "help_text: " ++ aMission.helpText ]
+                                [ text <| "help_text: " ++ aMission.helpText ]
                             , p []
-                                [ text  <| "active: "  ++ (Debug.toString aMission.active)]
+                                [ text <| "active: " ++ Debug.toString aMission.active ]
                             ]
-                        , Html.form []
+                        , Html.form [ onSubmit SubmitMissionUpdateForm ]
                             [ input [ name "id", type_ "hidden", value <| Mission.idToString aMission.id ]
                                 []
-                            , textarea [ name "help_text" ]
+                            , textarea [ name "help_text", onInput SetMissionUpdateFormHelpText ]
                                 [ text aMission.helpText ]
-                            , input [ name "active", type_ "checkbox", value "true", checked aMission.active ]
+                            , input [ name "active", type_ "checkbox", value "true", checked aMission.active, onCheck SetMissionUpdateFormActive ]
                                 []
-                            , text ""
+                            , button [] [ text "submit" ]
                             ]
                         ]
 
@@ -149,7 +220,7 @@ renderMission model missionId =
                     div [] [ text "Mission missing!" ]
 
 
-renderCurriculum : Model -> Html msg
+renderCurriculum : Model -> Html Msg
 renderCurriculum model =
     let
         renderHeader gradeLevels =
@@ -173,7 +244,7 @@ renderCurriculum model =
                             )
                     )
 
-        renderCell : Domain -> GradeLevel -> List Mission -> Html msg
+        renderCell : Domain -> GradeLevel -> List Mission -> Html Msg
         renderCell domain gradeLevel missions =
             let
                 match mission =
