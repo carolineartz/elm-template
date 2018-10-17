@@ -1,4 +1,4 @@
-module Mission exposing (Mission, MissionId(..), decoder, fetchAll, unwrapId)
+module Mission exposing (Mission, MissionId(..), decoder, fetchAll, unwrapId, idToString)
 
 import Domain exposing (DomainId(..))
 import GradeLevel exposing (GradeLevelId(..))
@@ -18,7 +18,7 @@ type alias Mission =
     , domainId : DomainId
     , activeQuestCount : Int
     , inactiveQuestCount : Int
-    , helpText : Maybe String
+    , helpText : String
     , active : Bool
     }
 
@@ -31,13 +31,18 @@ decoder =
         |> required "domain_id" (Decode.map DomainId Decode.int)
         |> required "active_quest_count" Decode.int
         |> required "inactive_quest_count" Decode.int
-        |> required "help_text" (Decode.nullable Decode.string)
+        |> optional "help_text" Decode.string ""
         |> required "active" Decode.bool
 
 
 unwrapId : MissionId -> Int
 unwrapId (MissionId id) =
     id
+
+
+idToString : MissionId -> String
+idToString (MissionId id) =
+    String.fromInt id
 
 
 fetchAll =

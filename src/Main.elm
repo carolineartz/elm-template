@@ -8,26 +8,21 @@ import GradeLevel exposing (GradeLevel)
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Http
+import HttpBuilder exposing (..)
 import Json.Decode as Decode
 import Mission exposing (Mission, MissionId, unwrapId)
+import RemoteData exposing (WebData)
 import Routing exposing (Route(..))
 import Url
 
 
 type alias Model =
-    { domains : RemoteData Http.Error (List Domain)
-    , gradeLevels : RemoteData Http.Error (List GradeLevel)
-    , missions : RemoteData Http.Error (List Mission)
+    { domains : WebData (List Domain)
+    , gradeLevels : WebData (List GradeLevel)
+    , missions : WebData (List Mission)
     , route : Maybe Route
     , key : Nav.Key
     }
-
-
-type RemoteData e a
-    = NotAsked
-    | Loading
-    | Failure e
-    | Success a
 
 
 type Msg
@@ -38,23 +33,13 @@ type Msg
     | MissionsLoadingComplete (Result Http.Error (List Mission))
 
 
-fromResult : Result e a -> RemoteData e a
-fromResult result =
-    case result of
-        Ok value ->
-            Success value
-
-        Err err ->
-            Failure err
-
-
 init : () -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
 init flags url key =
-    ( { gradeLevels = NotAsked, domains = NotAsked, missions = NotAsked, route = Routing.fromUrl url, key = key }
+    ( { gradeLevels = RemoteData.NotAsked, domains = RemoteData.NotAsked, missions = RemoteData.NotAsked, route = Routing.fromUrl url, key = key }
     , Cmd.batch
         [ Domain.fetchAll |> Http.send DomainsLoadingComplete
         , GradeLevel.fetchAll |> Http.send GradeLevelsLoadingComplete
-        , Mission.fetchAll |> Http.send MissionsLoadingComplete
+        , Mission.fetchAll |> HttpBuilder.send MissionsLoadingComplete
         ]
     )
 
@@ -62,14 +47,23 @@ init flags url key =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        DomainsLoadingComplete result ->
-            ( { model | domains = fromResult result }, Cmd.none )
+        MissionsLoadingComplete (Err error) ->
+            ( { model | missions = RemoteData.Failure error }, Cmd.none )
 
-        GradeLevelsLoadingComplete result ->
-            ( { model | gradeLevels = fromResult result }, Cmd.none )
+        MissionsLoadingComplete (Ok decodedValue) ->
+            ( { model | missions = RemoteData.Success decodedValue }, Cmd.none )
 
-        MissionsLoadingComplete result ->
-            ( { model | missions = fromResult result }, Cmd.none )
+        DomainsLoadingComplete (Err error) ->
+            ( { model | domains = RemoteData.Failure error }, Cmd.none )
+
+        DomainsLoadingComplete (Ok decodedValue) ->
+            ( { model | domains = RemoteData.Success decodedValue }, Cmd.none )
+
+        GradeLevelsLoadingComplete (Err error) ->
+            ( { model | domains = RemoteData.Failure error }, Cmd.none )
+
+        GradeLevelsLoadingComplete (Ok decodedValue) ->
+            ( { model | gradeLevels = RemoteData.Success decodedValue }, Cmd.none )
 
         LinkClicked (Browser.Internal url) ->
             ( model, Nav.pushUrl model.key (Url.toString url) )
@@ -86,6 +80,11 @@ view model =
     { title = "Test App"
     , body = renderRoute model
     }
+
+
+
+-- Let's discuss this
+-- It time, provide an example
 
 
 renderRoute : Model -> List (Html msg)
@@ -111,19 +110,40 @@ renderMission model missionId =
                 |> List.head
     in
     case model.missions of
-        NotAsked ->
+        RemoteData.NotAsked ->
             text "YOU FAIL"
 
-        Loading ->
+        RemoteData.Loading ->
             text "Loading..."
 
-        Failure err ->
+        RemoteData.Failure err ->
             text (Debug.toString err)
 
-        Success missions ->
+        RemoteData.Success missions ->
             case findMission missions of
                 Just aMission ->
-                    div [] [ text (Debug.toString aMission) ]
+                    div []
+                        -- [ div [] [ text (Debug.toString aMission) ]
+                        [ div []
+                            [ h1 []
+                                [ text "Mission" ]
+                            , p []
+                                [ text <| "mission_id: " ++ (Mission.idToString aMission.id) ]
+                            , p []
+                                [ text  <| "help_text: " ++ aMission.helpText ]
+                            , p []
+                                [ text  <| "active: "  ++ (Debug.toString aMission.active)]
+                            ]
+                        , Html.form []
+                            [ input [ name "id", type_ "hidden", value <| Mission.idToString aMission.id ]
+                                []
+                            , textarea [ name "help_text" ]
+                                [ text aMission.helpText ]
+                            , input [ name "active", type_ "checkbox", value "true", checked aMission.active ]
+                                []
+                            , text ""
+                            ]
+                        ]
 
                 Nothing ->
                     div [] [ text "Mission missing!" ]
@@ -177,7 +197,7 @@ renderCurriculum model =
                 ]
     in
     case ( model.missions, model.gradeLevels, model.domains ) of
-        ( Success missions, Success gradeLevels, Success domains ) ->
+        ( RemoteData.Success missions, RemoteData.Success gradeLevels, RemoteData.Success domains ) ->
             table [] (renderHeader gradeLevels :: renderBody domains gradeLevels missions)
 
         _ ->
