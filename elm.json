@@ -13,6 +13,7 @@
             "elm/http": "1.0.0",
             "elm/json": "1.0.0",
             "elm/url": "1.0.0",
+            "elm-community/list-extra": "8.1.0",
             "krisajenkins/remotedata": "5.0.0",
             "lukewestby/elm-http-builder": "6.0.0"
         },

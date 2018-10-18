@@ -1,4 +1,4 @@
-module Mission exposing (Mission, MissionId(..), decoder, fetchAll, unwrapId, idToString)
+module Mission exposing (Mission, decoder, fetch, fetchAll, find, fromRoute)
 
 import Domain exposing (DomainId(..))
 import GradeLevel exposing (GradeLevelId(..))
@@ -6,10 +6,9 @@ import Http
 import HttpBuilder exposing (..)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Decode.Pipeline exposing (hardcoded, optional, required)
-
-
-type MissionId
-    = MissionId Int
+import List.Extra as ListExtra
+import MissionId exposing (MissionId(..))
+import Routing exposing (Route(..))
 
 
 type alias Mission =
@@ -35,16 +34,37 @@ decoder =
         |> required "active" Decode.bool
 
 
-unwrapId : MissionId -> Int
-unwrapId (MissionId id) =
-    id
+find : MissionId -> List Mission -> Maybe Mission
+find missionId missions =
+    missions
+        |> ListExtra.find (\m -> m.id == missionId)
 
 
-idToString : MissionId -> String
-idToString (MissionId id) =
-    String.fromInt id
+
+-- fromRoute : List Mission -> Route -> Maybe Mission
+-- fromRoute missions route =
+--     case route of
+--         MissionRoute missionId ->
+--             find missionId missions
+--         _ ->
+--             Nothing
+
+
+fromRoute : Route -> List Mission -> Maybe Mission
+fromRoute route missions =
+    case route of
+        MissionRoute missionId ->
+            find missionId missions
+
+        _ ->
+            Nothing
 
 
 fetchAll =
     HttpBuilder.get "http://localhost:3000/missions"
         |> HttpBuilder.withExpectJson (Decode.list decoder)
+
+
+fetch id =
+    HttpBuilder.get ("http://localhost:3000/missions?id=" ++ MissionId.toString id)
+        |> HttpBuilder.withExpectJson decoder

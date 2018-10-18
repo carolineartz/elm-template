@@ -1,2 +1,2 @@
-db: json-server --watch db.json
-web: elm-live src/Main.elm --pushstate --open -- --debug
+db: yarn json-server --watch db.json
+web: elm-live src/Main.elm --pushstate -- --debug

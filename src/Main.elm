@@ -11,9 +11,11 @@ import Html.Events exposing (..)
 import Http
 import HttpBuilder exposing (..)
 import Json.Decode as Decode
-import Mission exposing (Mission, MissionId, unwrapId)
+import Mission exposing (Mission)
+import MissionId exposing (MissionId)
 import RemoteData exposing (WebData)
 import Routing exposing (Route(..))
+import Task
 import Url
 
 
@@ -24,6 +26,7 @@ type alias Model =
     , route : Maybe Route
     , key : Nav.Key
     , missionUpdateForm : MissionFormModel
+    , getCurrentMission : List Mission -> Route -> Maybe Mission
     }
 
 
@@ -33,42 +36,108 @@ type Msg
     | DomainsLoadingComplete (Result Http.Error (List Domain))
     | GradeLevelsLoadingComplete (Result Http.Error (List GradeLevel))
     | MissionsLoadingComplete (Result Http.Error (List Mission))
+      -- | MissionLoadComplete (Result Http.Error Mission)
     | SubmitMissionUpdateForm
     | SetMissionUpdateFormHelpText String
     | SetMissionUpdateFormActive Bool
 
 
+
+-- initialFetchForRoute : Maybe Route -> Cmd Msg
+
+
+initialFetchForRoute route =
+    case route of
+        Just CurriculumRoute ->
+            -- Task.map3
+            Cmd.batch
+                [ Domain.fetchAll |> Http.send DomainsLoadingComplete
+                , GradeLevel.fetchAll |> Http.send GradeLevelsLoadingComplete
+                , Mission.fetchAll |> HttpBuilder.send MissionsLoadingComplete
+                ]
+
+        Just (MissionRoute missionId) ->
+            Mission.fetchAll
+                -- |> HttpBuilder.send MissionsLoadingComplete
+                |> HttpBuilder.toRequest
+                |> Http.toTask
+                |> Task.andThen (Task.attempt Mission.fromRoute route)
+
+        Nothing ->
+            Cmd.none
+
+
+
+-- setRoute : Maybe Route -> Model -> ( Model, Cmd Msg )
+-- setRoute maybeRoute model =
+--     let
+--         transition toMsg task =
+--             { model | pageState = TransitioningFrom (getPage model.pageState) }
+--                 => Task.attempt toMsg task
+--         errored =
+--             pageErrored model
+--     in
+--         case maybeRoute of
+--             Nothing ->
+--                 { model | pageState = Loaded NotFound } => Cmd.none
+--             Just Route.NewArticle ->
+--                 case model.session.user of
+--                     Just user ->
+--                         { model | pageState = Loaded (Editor Nothing Editor.initNew) } => Cmd.none
+--                     Nothing ->
+--                         errored Page.NewArticle "You must be signed in to post an article."
+-- initEdit : Task  Model
+
+
+initEditMission missionId =
+    Mission.fetch
+        |> Http.toTask
+        -- |> Task.mapError (\_ -> pageLoadError Page.Other "Article is currently unavailable.")
+        |> Task.map
+            (\mission ->
+                { errors = []
+                , id = MissionId.toString mission.id
+                , helpText = mission.helpText
+                , active = mission.active
+                }
+            )
+
+
 init : () -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
 init flags url key =
-    let
-        fetchTask =
-            Task.map3
-                (Domain.fetchAll |> Http.send DomainsLoadingComplete)
-                    |> Http.toTask
-                (GradeLevel.fetchAll |> Http.send GradeLevelsLoadingComplete)
-                    |> Http.toTask
-                (Mission.fetchAll |> HttpBuilder.send MissionsLoadingComplete)
-                    |> Http.toTask
+    -- let
+    -- fetchTask =
+    --     Task.map3
+    --         (Domain.fetchAll |> Http.send DomainsLoadingComplete)
+    --         |> Http.toTask
+    --             (GradeLevel.fetchAll |> Http.send GradeLevelsLoadingComplete)
+    --         |> Http.toTask
+    --             (Mission.fetchAll |> HttpBuilder.send MissionsLoadingComplete)
+    --         |> Http.toTask
+    --
+    -- blah =
+    --     Task.sequence [ fetchTask ]
+    -- Cmd.batch
+    -- [ Domain.fetchAll |> Http.send DomainsLoadingComplete
+    -- , GradeLevel.fetchAll |> Http.send GradeLevelsLoadingComplete
+    -- , Mission.fetchAll |> HttpBuilder.send MissionsLoadingComplete
+    -- ]
+    -- in
+    ( { gradeLevels = RemoteData.Loading
+      , domains = RemoteData.Loading
+      , missions = RemoteData.Loading
+      , route = Routing.fromUrl url
+      , key = key
+      , missionUpdateForm = emptyMissionUpdateForm
+      , getCurrentMission = Mission.fromRoute
+      }
+    , initialFetchForRoute (Routing.fromUrl url)
+    )
 
-        blah =
-            Task.sequence []
-            -- Cmd.batch
-            -- [ Domain.fetchAll |> Http.send DomainsLoadingComplete
-            -- , GradeLevel.fetchAll |> Http.send GradeLevelsLoadingComplete
-            -- , Mission.fetchAll |> HttpBuilder.send MissionsLoadingComplete
-            -- ]
-        )
-    in
-        ( { gradeLevels = RemoteData.NotAsked
-          , domains = RemoteData.NotAsked
-          , missions = RemoteData.NotAsked
-          , route = Routing.fromUrl url
-          , key = key
-          , missionUpdateForm = emptyMissionUpdateForm
-          }
-        ,
 
-Task.perform
+
+-- Task.perform
+
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
@@ -76,20 +145,20 @@ update msg model =
         MissionsLoadingComplete (Err error) ->
             ( { model | missions = RemoteData.Failure error }, Cmd.none )
 
-        MissionsLoadingComplete (Ok decodedValue) ->
-            ( { model | missions = RemoteData.Success decodedValue }, Cmd.none )
+        MissionsLoadingComplete (Ok missions) ->
+            ( { model | missions = RemoteData.Success missions }, Cmd.none )
 
         DomainsLoadingComplete (Err error) ->
             ( { model | domains = RemoteData.Failure error }, Cmd.none )
 
-        DomainsLoadingComplete (Ok decodedValue) ->
-            ( { model | domains = RemoteData.Success decodedValue }, Cmd.none )
+        DomainsLoadingComplete (Ok domains) ->
+            ( { model | domains = RemoteData.Success domains }, Cmd.none )
 
         GradeLevelsLoadingComplete (Err error) ->
             ( { model | domains = RemoteData.Failure error }, Cmd.none )
 
-        GradeLevelsLoadingComplete (Ok decodedValue) ->
-            ( { model | gradeLevels = RemoteData.Success decodedValue }, Cmd.none )
+        GradeLevelsLoadingComplete (Ok gradeLevels) ->
+            ( { model | gradeLevels = RemoteData.Success gradeLevels }, Cmd.none )
 
         LinkClicked (Browser.Internal url) ->
             ( model, Nav.pushUrl model.key (Url.toString url) )
@@ -191,7 +260,6 @@ renderMission model missionId =
             text (Debug.toString err)
 
         RemoteData.Success missions ->
-
             case findMission missions of
                 Just aMission ->
                     div []
@@ -199,14 +267,14 @@ renderMission model missionId =
                             [ h1 []
                                 [ text "Mission" ]
                             , p []
-                                [ text <| "mission_id: " ++ Mission.idToString aMission.id ]
+                                [ text <| "mission_id: " ++ MissionId.toString aMission.id ]
                             , p []
                                 [ text <| "help_text: " ++ aMission.helpText ]
                             , p []
                                 [ text <| "active: " ++ Debug.toString aMission.active ]
                             ]
                         , Html.form [ onSubmit SubmitMissionUpdateForm ]
-                            [ input [ name "id", type_ "hidden", value <| Mission.idToString aMission.id ]
+                            [ input [ name "id", type_ "hidden", value <| MissionId.toString aMission.id ]
                                 []
                             , textarea [ name "help_text", onInput SetMissionUpdateFormHelpText ]
                                 [ text aMission.helpText ]

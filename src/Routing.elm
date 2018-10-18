@@ -2,7 +2,7 @@ module Routing exposing (Route(..), fromUrl, link)
 
 import Html exposing (Html)
 import Html.Attributes
-import Mission exposing (MissionId(..))
+import MissionId exposing (MissionId)
 import Url exposing (Url)
 import Url.Parser as Parser exposing ((</>), Parser, oneOf, s, string)
 
@@ -16,7 +16,7 @@ parser : Parser (Route -> a) a
 parser =
     oneOf
         [ Parser.map CurriculumRoute Parser.top
-        , Parser.map MissionRoute (s "missions" </> Parser.custom "MISSIONS" (\str -> String.toInt str |> Maybe.map MissionId))
+        , Parser.map MissionRoute (s "missions" </> MissionId.urlParser)
         ]
 
 
@@ -36,7 +36,7 @@ toUrlPath route =
             "/"
 
         MissionRoute missionId ->
-            "/missions/" ++ (Mission.unwrapId missionId |> String.fromInt)
+            "/missions/" ++ MissionId.toString missionId
 
 
 link : Route -> List (Html.Attribute msg) -> List (Html msg) -> Html msg
